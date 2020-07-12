@@ -1,0 +1,147 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeconfig
+  labels:
+    {{- include "labels" . | nindent 4 }}
+<<<<<<< HEAD
+data:
+  config: |-
+{{ .Values.kubeconfig | indent 4 }}
+=======
+spec:
+  ports:
+  - name: web
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    {{- include "selectorLabels" . | nindent 4 }}
+>>>>>>> dd1569e0e2ba88eadb18c4c69d7c1dd1e6f338dc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "labels" . | nindent 8 }}
+    spec:
+      volumes:
+        - name: html
+          emptyDir: {}
+        - name: accesslog
+          emptyDir: {}
+        - name: kubeconfig
+          configMap:
+            name: kubeconfig
+            defaultMode: 0777
+      containers:
+      - name: nginx
+        image: nginx:latest
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+        ports:
+        - containerPort: 80
+          name: web
+          protocol: TCP
+      - name: kubectl
+        image: bitnami/kubectl:latest
+        volumeMounts:
+        - name: kubeconfig
+          mountPath: .kube
+        - name: accesslog
+          mountPath: /accesslog
+        command: ["/bin/sh"]
+        args: ["-c", "kubectl logs -l{{ .Values.nginxcontrollerlabel }} --all-containers=true -f -n {{ .Values.nginxcontrollernamespace }} > /accesslog/access.log"]
+      - name: goaccess
+        image: allinurl/goaccess:latest
+        volumeMounts:
+        - name: html
+          mountPath: /html
+        - name: accesslog
+          mountPath: /accesslog
+        command: ["/bin/sh", "-c"]
+        args:
+          - goaccess /accesslog/access.log -o /html/index.html --log-format=COMBINED --real-time-html --ws-url={{ .Values.host }}:443/ws;
+        ports:
+        - containerPort: 7890
+          name: ws
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}-nginx
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: web
+    port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    {{- include "selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Chart.Name }}-ws
+  labels:
+    {{- include "labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: ws
+    port: 7890
+    protocol: TCP
+    targetPort: 7890
+  selector:
+    {{- include "selectorLabels" . | nindent 4 }}
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: {{ include "fullname" . }}-ingress
+  labels:
+    {{- include "labels" . | nindent 4 }}
+  annotations:
+    nginx.org/websocket-services: "{{ .Chart.Name }}-ws"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1800"
+    nginx.ingress.kubernetes.io/affinity: cookie
+spec:
+  tls:
+  - hosts:
+    - {{ .Values.host }}
+    secretName: {{ .Values.host }}-tls
+  rules:
+  - host: {{ .Values.host }}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ .Chart.Name }}-nginx
+          servicePort: 80
+<<<<<<< HEAD
+      - path: /ws
+        backend:
+          serviceName: {{ .Chart.Name }}-ws
+          servicePort: 7890
+            
+=======
+        path: /
+>>>>>>> dd1569e0e2ba88eadb18c4c69d7c1dd1e6f338dc
